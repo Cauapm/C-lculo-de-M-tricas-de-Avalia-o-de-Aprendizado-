@@ -1,0 +1,97 @@
+import tensorflow as tf
+from tensorflow.keras import datasets, layers, models  # Importa módulos do Keras para criar a rede neural
+import matplotlib.pyplot as plt  # Biblioteca para plotar gráficos
+import numpy as np  # Biblioteca para operações matemáticas
+import seaborn as sns  # Biblioteca para visualização de dados
+import pandas as pd  # Biblioteca para manipulação de dados tabulares
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import roc_curve, auc  # Importa métricas de avaliação do Scikit-learn
+from sklearn.preprocessing import label_binarize  # Para converter rótulos em formato binário
+
+# Carrega o conjunto de dados MNIST (imagens de dígitos manuscritos de 0 a 9)
+(train_images, train_labels), (test_images, test_labels) = datasets.mnist.load_data()
+
+# Ajusta o formato das imagens para (28, 28, 1) e normaliza os valores para o intervalo [0, 1]
+train_images = train_images.reshape((60000, 28, 28, 1))  
+test_images = test_images.reshape((10000, 28, 28, 1))
+train_images, test_images = train_images / 255.0, test_images / 255.0  # Normalização dos pixels
+
+classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # Definição das classes (dígitos de 0 a 9)
+
+# Criação da rede neural convolucional (CNN)
+model = models.Sequential()
+model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)))  # Primeira camada convolucional
+model.add(layers.MaxPooling2D((2, 2)))  # Camada de pooling para redução de dimensionalidade
+model.add(layers.Conv2D(64, (3, 3), activation='relu'))  # Segunda camada convolucional
+model.add(layers.MaxPooling2D((2, 2)))  # Segunda camada de pooling
+model.add(layers.Conv2D(64, (3, 3), activation='relu'))  # Terceira camada convolucional
+model.add(layers.Flatten())  # Flatten para transformar a saída em um vetor
+model.add(layers.Dense(64, activation='relu'))  # Camada totalmente conectada com 64 neurônios
+model.add(layers.Dense(10, activation='softmax'))  # Camada de saída com 10 neurônios (uma para cada dígito)
+
+# Compilação do modelo com otimizador Adam e função de perda categórica
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+
+# Treinamento do modelo por 5 épocas com validação no conjunto de teste
+model.fit(x=train_images,
+          y=train_labels,
+          epochs=5,
+          validation_data=(test_images, test_labels))
+
+# Predição no conjunto de teste
+y_true = test_labels
+y_pred = model.predict(test_images)  # Obtém as probabilidades de cada classe
+y_pred_labels = tf.argmax(y_pred, axis=1).numpy()  # Obtém as classes previstas
+
+# Criação da matriz de confusão
+con_mat = confusion_matrix(y_true, y_pred_labels)
+con_mat_norm = np.around(con_mat.astype('float') / con_mat.sum(axis=1)[:, np.newaxis], decimals=2)  # Normalização
+com_mat_df = pd.DataFrame(con_mat_norm, index=classes, columns=classes)  # Converte para DataFrame
+
+# Plotagem da matriz de confusão usando seaborn
+figure = plt.figure(figsize=(8, 8))
+sns.heatmap(com_mat_df, annot=True, cmap=plt.cm.Blues)
+plt.tight_layout()
+plt.ylabel('True label')
+plt.xlabel('Predicted label')
+plt.show()
+
+# Cálculo das métricas de avaliação
+accuracy = accuracy_score(y_true, y_pred_labels)  # Acurácia
+precision = precision_score(y_true, y_pred_labels, average='weighted')  # Precisão
+recall = recall_score(y_true, y_pred_labels, average='weighted')  # Recall
+f1 = f1_score(y_true, y_pred_labels, average='weighted')  # F1-Score
+
+# Exibição das métricas
+print(f"Acurácia: {accuracy}")
+print(f"Precisão: {precision}")
+print(f"Recall: {recall}")
+print(f"F1-Score: {f1}")
+
+# Binarização dos rótulos verdadeiros e previstos para cálculo da curva ROC
+y_true_bin = label_binarize(y_true, classes=classes)
+y_pred_bin = label_binarize(y_pred_labels, classes=classes)
+
+# Cálculo da curva ROC para cada classe
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+for i in range(len(classes)):
+    fpr[i], tpr[i], _ = roc_curve(y_true_bin[:, i], y_pred_bin[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+
+# Plotagem das curvas ROC
+plt.figure()
+for i in range(len(classes)):
+    plt.plot(fpr[i], tpr[i], label='Classe da Curva de ROC {0} (área = {1:0.2f})'.format(i, roc_auc[i]))
+
+plt.plot([0, 1], [0, 1], 'k--')  # Linha diagonal (caso de classificação aleatória)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('Falso Positivo')
+plt.ylabel('Verdadeiro Positivo')
+plt.title('Curva de ROC')
+plt.legend(loc="lower right")
+plt.show()
